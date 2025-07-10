@@ -1,0 +1,7 @@
+{
+  "environment": "dev",
+  "aws_region": "us-east-1",
+  "dynamodb_table": "nsp-bolt-trips-dev",
+  "kinesis_stream": "nsp-bolt-events-dev",
+  "s3_bucket": "nsp-bolt-analytics-dev"
+}
