@@ -68,11 +68,14 @@ jobs:
       - name: Deploy Stream Processor Lambda
         run: |
           echo "🚀 Deploying stream processor to AWS Lambda..."
+
+          aws lambda wait function-updated --function-name nsp-bolt-stream-processor-dev
           aws lambda update-function-code \
             --function-name nsp-bolt-stream-processor-dev \
             --zip-file fileb://stream_processor-dev.zip \
             --publish
-            
+
+          aws lambda wait function-updated --function-name nsp-bolt-stream-processor-dev  
           aws lambda update-function-configuration \
             --function-name nsp-bolt-stream-processor-dev \
             --environment Variables="{ENVIRONMENT=dev,TABLE_NAME=nsp-bolt-trips-dev,BUCKET_NAME=nsp-bolt-analytics-dev}"
