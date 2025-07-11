@@ -1,6 +1,6 @@
 """
 CSV-based Trip Data Generator for NSP Bolt Ride
-Simulates realistic streaming data from CSV files with out-of-order arrival patterns
+Ensures complete data exhaustion with proper record tracking
 """
 import json
 import boto3
@@ -19,30 +19,27 @@ class CSVTripDataGenerator:
     def __init__(self, stream_name, region='us-east-1', trip_start_csv=None, trip_end_csv=None):
         """
         Initialize the generator with CSV data sources
-        
-        Args:
-            stream_name: Kinesis stream name
-            region: AWS region
-            trip_start_csv: Path to trip_start CSV file
-            trip_end_csv: Path to trip_end CSV file
         """
         self.kinesis = boto3.client('kinesis', region_name=region)
         self.stream_name = stream_name
         
-        # Load CSV data
-        self.trip_start_data = pd.read_csv(trip_start_csv) if trip_start_csv else None
-        self.trip_end_data = pd.read_csv(trip_end_csv) if trip_end_csv else None
+        # Load CSV data into lists for proper exhaustion
+        self.trip_start_data = pd.read_csv(trip_start_csv).to_dict('records') if trip_start_csv else []
+        self.trip_end_data = pd.read_csv(trip_end_csv).to_dict('records') if trip_end_csv else []
         
-        # Track processed indices
-        self.trip_start_index = 0
-        self.trip_end_index = 0
+        # Track original counts for statistics
+        self.original_start_count = len(self.trip_start_data)
+        self.original_end_count = len(self.trip_end_data)
         
         # Statistics
         self.events_sent = 0
         self.errors = 0
+        self.start_events_sent = 0
+        self.end_events_sent = 0
         
-        logger.info(f"Loaded {len(self.trip_start_data)} trip_start records")
-        logger.info(f"Loaded {len(self.trip_end_data)} trip_end records")
+        logger.info(f"Loaded {self.original_start_count} trip_start records")
+        logger.info(f"Loaded {self.original_end_count} trip_end records")
+        logger.info(f"Total events to process: {self.original_start_count + self.original_end_count}")
     
     def csv_row_to_trip_start_event(self, row):
         """Convert CSV row to trip_start event format"""
@@ -83,6 +80,12 @@ class CSVTripDataGenerator:
             
             logger.info(f"✅ Sent {event_data['event_type']} for trip {event_data['trip_id']}")
             self.events_sent += 1
+            
+            if event_data['event_type'] == 'trip_start':
+                self.start_events_sent += 1
+            else:
+                self.end_events_sent += 1
+                
             return response
             
         except Exception as e:
@@ -92,13 +95,13 @@ class CSVTripDataGenerator:
     
     def get_next_event(self):
         """
-        Get next event with realistic ordering logic:
-        - 70% chance trip_start comes before trip_end
-        - 30% chance of out-of-order arrival
-        - Exhaust data from both files
+        Get next event with proper data exhaustion:
+        - Randomly select from available data
+        - Remove selected record from list
+        - Maintain 70/30 ordering preference
         """
-        trip_start_available = self.trip_start_index < len(self.trip_start_data)
-        trip_end_available = self.trip_end_index < len(self.trip_end_data)
+        trip_start_available = len(self.trip_start_data) > 0
+        trip_end_available = len(self.trip_end_data) > 0
         
         # If no data left, return None
         if not trip_start_available and not trip_end_available:
@@ -106,43 +109,49 @@ class CSVTripDataGenerator:
         
         # If only one type available, use it
         if trip_start_available and not trip_end_available:
-            row = self.trip_start_data.iloc[self.trip_start_index]
-            self.trip_start_index += 1
+            # Randomly select and remove from trip_start_data
+            selected_index = random.randint(0, len(self.trip_start_data) - 1)
+            row = self.trip_start_data.pop(selected_index)  # Remove from list
             return self.csv_row_to_trip_start_event(row)
         
         if trip_end_available and not trip_start_available:
-            row = self.trip_end_data.iloc[self.trip_end_index]
-            self.trip_end_index += 1
+            # Randomly select and remove from trip_end_data
+            selected_index = random.randint(0, len(self.trip_end_data) - 1)
+            row = self.trip_end_data.pop(selected_index)  # Remove from list
             return self.csv_row_to_trip_end_event(row)
         
-        # Both types available - apply ordering logic
-        # 70% chance trip_start comes first, 30% chance out-of-order
+        # Both types available - apply 70/30 ordering logic
         if random.random() < 0.7:
-            # Prefer trip_start
-            row = self.trip_start_data.iloc[self.trip_start_index]
-            self.trip_start_index += 1
+            # Prefer trip_start (70% chance)
+            selected_index = random.randint(0, len(self.trip_start_data) - 1)
+            row = self.trip_start_data.pop(selected_index)  # Remove from list
             return self.csv_row_to_trip_start_event(row)
         else:
-            # Out-of-order: send trip_end first
-            row = self.trip_end_data.iloc[self.trip_end_index]
-            self.trip_end_index += 1
+            # Out-of-order: send trip_end first (30% chance)
+            selected_index = random.randint(0, len(self.trip_end_data) - 1)
+            row = self.trip_end_data.pop(selected_index)  # Remove from list
             return self.csv_row_to_trip_end_event(row)
+    
+    def get_remaining_counts(self):
+        """Get remaining record counts"""
+        return {
+            'trip_start_remaining': len(self.trip_start_data),
+            'trip_end_remaining': len(self.trip_end_data),
+            'total_remaining': len(self.trip_start_data) + len(self.trip_end_data)
+        }
     
     def simulate_streaming(self, delay_min=0.5, delay_max=3.0, batch_size=1):
         """
-        Simulate streaming data with realistic delays
-        
-        Args:
-            delay_min: Minimum delay between events (seconds)
-            delay_max: Maximum delay between events (seconds)
-            batch_size: Number of events to send in each batch
+        Simulate streaming data with complete exhaustion
         """
         logger.info(f"🚀 Starting CSV data streaming simulation...")
         logger.info(f"Stream: {self.stream_name}")
+        logger.info(f"Total records to process: {self.original_start_count + self.original_end_count}")
         logger.info(f"Delay range: {delay_min}-{delay_max} seconds")
         logger.info(f"Batch size: {batch_size}")
         
         start_time = datetime.now()
+        batch_count = 0
         
         while True:
             batch_events = []
@@ -162,32 +171,31 @@ class CSVTripDataGenerator:
             for event in batch_events:
                 self.send_event_to_kinesis(event)
             
+            batch_count += 1
+            remaining = self.get_remaining_counts()
+            
+            # Progress logging
+            logger.info(f"📊 Batch {batch_count}: Sent {len(batch_events)} events")
+            logger.info(f"   Remaining: {remaining['trip_start_remaining']} starts, {remaining['trip_end_remaining']} ends")
+            
             # Random delay between batches
             delay = random.uniform(delay_min, delay_max)
-            logger.info(f"📊 Sent batch of {len(batch_events)} events. Waiting {delay:.2f}s...")
             time.sleep(delay)
         
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
         
-        logger.info("✅ Streaming simulation completed!")
-        logger.info(f"📈 Statistics:")
-        logger.info(f"   - Total events sent: {self.events_sent}")
-        logger.info(f"   - Errors: {self.errors}")
-        logger.info(f"   - Duration: {duration:.2f} seconds")
-        logger.info(f"   - Average rate: {self.events_sent/duration:.2f} events/second")
+        self.log_final_statistics(duration)
     
     def simulate_burst_traffic(self, burst_size=50, burst_delay=10):
         """
-        Simulate burst traffic patterns
-        
-        Args:
-            burst_size: Number of events per burst
-            burst_delay: Delay between bursts (seconds)
+        Simulate burst traffic with complete data exhaustion
         """
         logger.info(f"🚀 Starting burst traffic simulation...")
+        logger.info(f"Total records to process: {self.original_start_count + self.original_end_count}")
         logger.info(f"Burst size: {burst_size}, Burst delay: {burst_delay}s")
         
+        start_time = datetime.now()
         burst_count = 0
         
         while True:
@@ -204,21 +212,50 @@ class CSVTripDataGenerator:
                 break
             
             # Send burst rapidly
-            logger.info(f"💥 Sending burst {burst_count + 1} with {len(burst_events)} events...")
+            burst_count += 1
+            remaining = self.get_remaining_counts()
+            
+            logger.info(f"💥 Burst {burst_count}: Sending {len(burst_events)} events...")
+            logger.info(f"   Remaining after burst: {remaining['trip_start_remaining']} starts, {remaining['trip_end_remaining']} ends")
+            
             for event in burst_events:
                 self.send_event_to_kinesis(event)
                 time.sleep(0.1)  # Small delay within burst
             
-            burst_count += 1
-            
-            # Wait before next burst
-            if self.get_next_event() is not None:  # Check if more data available
+            # Wait before next burst (if more data available)
+            remaining_after = self.get_remaining_counts()
+            if remaining_after['total_remaining'] > 0:
                 logger.info(f"⏳ Waiting {burst_delay}s before next burst...")
                 time.sleep(burst_delay)
-            else:
-                break
         
-        logger.info(f"✅ Burst simulation completed! Sent {burst_count} bursts")
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        
+        self.log_final_statistics(duration)
+    
+    def log_final_statistics(self, duration):
+        """Log comprehensive final statistics"""
+        logger.info("✅ Data generation completed!")
+        logger.info(f"📈 Final Statistics:")
+        logger.info(f"   - Original trip_start records: {self.original_start_count}")
+        logger.info(f"   - Original trip_end records: {self.original_end_count}")
+        logger.info(f"   - Total original records: {self.original_start_count + self.original_end_count}")
+        logger.info(f"   - Trip_start events sent: {self.start_events_sent}")
+        logger.info(f"   - Trip_end events sent: {self.end_events_sent}")
+        logger.info(f"   - Total events sent: {self.events_sent}")
+        logger.info(f"   - Errors: {self.errors}")
+        logger.info(f"   - Duration: {duration:.2f} seconds")
+        logger.info(f"   - Average rate: {self.events_sent/duration:.2f} events/second")
+        
+        # Data exhaustion verification
+        remaining = self.get_remaining_counts()
+        logger.info(f"   - Remaining trip_start: {remaining['trip_start_remaining']}")
+        logger.info(f"   - Remaining trip_end: {remaining['trip_end_remaining']}")
+        
+        if remaining['total_remaining'] == 0:
+            logger.info("🎉 SUCCESS: All CSV data completely exhausted!")
+        else:
+            logger.warning(f"⚠️  WARNING: {remaining['total_remaining']} records not processed!")
 
 def main():
     """Command line interface for the generator"""
