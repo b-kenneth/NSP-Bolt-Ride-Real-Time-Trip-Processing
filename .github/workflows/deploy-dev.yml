@@ -44,7 +44,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
           aws-region: ${{ env.AWS_REGION }}
-        continue-on-error: true
           
       - name: Package Lambda functions
         run: |
@@ -59,16 +58,47 @@ jobs:
           cd ../../..
           
           # Package aggregation function
-          cd src/lambda/aggregation
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt -t .
-          fi
-          zip -r ../../../aggregation-dev.zip .
-          cd ../../..
+          # cd src/lambda/aggregation
+          # if [ -f requirements.txt ]; then
+          #   pip install -r requirements.txt -t .
+          # fi
+          # zip -r ../../../aggregation-dev.zip .
+          # cd ../../..
           
-      - name: Simulate deployment
+      - name: Deploy Stream Processor Lambda
         run: |
-          echo "🚀 Simulating deployment to development environment..."
-          echo "✅ Stream processor package: $(ls -lh stream_processor-dev.zip)"
-          echo "✅ Aggregation package: $(ls -lh aggregation-dev.zip)"
-          echo "✅ Development deployment completed successfully!"
+          echo "🚀 Deploying stream processor to AWS Lambda..."
+          aws lambda update-function-code \
+            --function-name nsp-bolt-stream-processor-dev \
+            --zip-file fileb://stream_processor-dev.zip \
+            --publish
+            
+          aws lambda update-function-configuration \
+            --function-name nsp-bolt-stream-processor-dev \
+            --environment Variables="{ENVIRONMENT=dev,TABLE_NAME=nsp-bolt-trips-dev,BUCKET_NAME=nsp-bolt-analytics-dev}"
+            
+      # - name: Deploy Aggregation Lambda
+      #   run: |
+      #     echo "🚀 Deploying aggregation function to AWS Lambda..."
+      #     aws lambda update-function-code \
+      #       --function-name nsp-bolt-aggregation-dev \
+      #       --zip-file fileb://aggregation-dev.zip \
+      #       --publish
+            
+      #     aws lambda update-function-configuration \
+      #       --function-name nsp-bolt-aggregation-dev \
+      #       --environment Variables="{ENVIRONMENT=dev,TABLE_NAME=nsp-bolt-trips-dev,BUCKET_NAME=nsp-bolt-analytics-dev}"
+            
+      - name: Verify Deployment
+        run: |
+          echo "✅ Verifying Lambda function deployments..."
+          
+          # Check stream processor
+          STREAM_VERSION=$(aws lambda get-function --function-name nsp-bolt-stream-processor-dev --query 'Configuration.Version' --output text)
+          echo "Stream processor version: $STREAM_VERSION"
+          
+          # Check aggregation function
+          # AGG_VERSION=$(aws lambda get-function --function-name nsp-bolt-aggregation-dev --query 'Configuration.Version' --output text)
+          # echo "Aggregation function version: $AGG_VERSION"
+          
+          echo "🎉 Development deployment completed successfully!"
