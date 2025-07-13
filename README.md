@@ -89,6 +89,56 @@ NSP Bolt Ride is a production-ready, real-time trip data ingestion and analytics
 - **AWS X-Ray**: Distributed tracing (configurable)
 - **Custom Metrics**: Data quality and processing performance tracking
 
+## Directory Structure breakdown
+
+**CI/CD Configuration**
+- `.github/workflows/` - Contains GitHub Actions workflows for automated testing and deployment
+  - `ci.yml` - Continuous integration pipeline
+  - `deploy-dev.yml` - Development environment deployment
+  - `deploy-prod.yml` - Production environment deployment
+
+### **Configuration Management**
+- `config/` - Environment-specific configuration files
+  - `dev.json` - Development environment settings
+  - `prod.json` - Production environment settings
+
+### **Documentation & Assets**
+- `data/` - Project stream files
+- `images/` - Project diagrams and visual assets
+  - `architecture_diagram.svg` - System architecture diagram
+  - `nsp-bolt-success.png` - Success notification screenshot
+  - `nsp-bolt0step-functions.p...` - Step Functions workflow diagram
+
+### **Source Code**
+- `src/` - Main application source code
+  - `glue/` - AWS Glue job scripts
+    - `daily_kpi_aggregation.py` - Daily KPI computation job
+  - `lambda/` - AWS Lambda function code
+    - `aggregation/` - KPI aggregation Lambda
+      - `handler.py` - Main handler function
+      - `requirements.txt` - Python dependencies
+    - `stream_processor/` - Real-time stream processing Lambda
+      - `handler.py` - Stream processing logic
+      - `requirements.txt` - Python dependencies
+  - `utils/` - Shared utility functions
+    - `__init__.py` - Package initialization
+    - `csv_trip_generator.py` - Data generator for testing
+
+### **Testing Framework**
+- `tests/` - Test suites and test configuration
+  - `integration/` - End-to-end integration tests
+    - `test_pipeline.py` - Pipeline integration tests
+  - `unit/` - Unit tests for individual components
+    - `test_stream_processor.py` - Stream processor unit tests
+  - `__init__.py` - Test package initialization
+
+### **Project Configuration Files**
+- `.gitignore` - Git ignore patterns
+- `README.md` - Project documentation and setup instructions
+- `requirements.txt` - Python project dependencies
+- `test-file.md` - Test markdown file
+
+
 ## Setup Instructions
 
 ### Prerequisites
